@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from collections.abc import Iterable
 
-def mean_range_plot(df,column=None, ax=None, alpha=0.3, label=None, **kwargs):
+def mean_range_plot(df,column=None, ax=None, alpha=0.3,
+                    label=None, meanplot=True, **kwargs):
     
     ## if df is a dataframe:
     ##      x = df.index, y1=df[column1], y2=df[column2],...
@@ -57,9 +58,20 @@ def mean_range_plot(df,column=None, ax=None, alpha=0.3, label=None, **kwargs):
     if ax is None: fig, ax = plt.subplots()
     
     ## ploting
-    line,  = ax.plot(x_,mean_,label=label, **kwargs)
+    if meanplot:
+        line,  = ax.plot(x_,mean_,label=label, **kwargs)
+    else:
+        line,  = ax.plot([],[], **kwargs)
+        
     line_color = line.get_color()
     ax.fill_between(x_,min_,max_,alpha=alpha,color=line_color)
     ## fake plot for legend
     # ax.plot([],[],label=label,**kwargs)
-
+    
+    
+def R_square(y_exact,y_pred):
+    y_mean    = y_exact.mean()
+    SST       = ((y_exact-y_mean)**2).sum()
+    SSR       =((y_exact-y_pred)**2).sum()
+    r_squared = 1-SSR/SST
+    return r_squared

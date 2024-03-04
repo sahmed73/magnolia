@@ -9,6 +9,7 @@ import math
 from functools import wraps
 import time
 import sys
+import numpy
 
 def function_runtime(f):
     @wraps(f)
@@ -41,46 +42,36 @@ def parsedumpfile(dumpfile,**kwargs):
                 # value      = [atomtype, position = (x,y,z)]
                 
         ###-get kwargs-####
-        fso      = kwargs.get('fso',False)
-        fs_flag  = 0
         
         get_timestep    = False
-        get_coordinates = False
+        get_atominfo = False
         
         dumpdata   = {}
-        atomtypes  = {} # need only one timestep
-        position = {}   # dynamic position (Step-->atomid-->position)
+        atomtypes  = {}
+        position = {}
         for line in df:
-            splitted = line.split()            
-            if splitted[-1]=='TIMESTEP':
-                get_timestep    = True
-                get_coordinates = False
-                fs_flag +=1
-                continue
+            splitted = line.split()  
             
-            if fso and fs_flag>1:
-                break
+            # flagging
+            if splitted[-1]=='TIMESTEP':
+                get_timestep = True
+                get_atominfo = False
+                continue
+            if line.startswith('ITEM: ATOMS'):
+                column_heads = splitted[2:]
+                get_atominfo = True
+                continue
                 
+            # get values
             if get_timestep:
                 step = int(splitted[0])
-                position[step] = {}
                 get_timestep = False
-                continue
+                dumpdata[step] = {}
                 
-            if line.find('ITEM: ATOMS')!=-1:
-                get_coordinates = True
-                continue
+            if get_atominfo:
+                atomid = int(splitted[0])
+                dumpdata[step][atomid] = splitted[1:]
             
-            if get_coordinates:
-                atomid,atype,*coordinates = splitted
-                atomid   = int(atomid)
-                atype = int(atype)
-                coordinates = tuple(map(float,coordinates))
-                position[step][atomid] = coordinates
-                atomtypes[atomid] = atype
-        
-        dumpdata['position'] = position  #dictionary of dictionary 
-        dumpdata['atypes']   = atomtypes #dictionary (atomid-->atomtypes)
     
     return dumpdata
                 
