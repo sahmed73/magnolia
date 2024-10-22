@@ -6,11 +6,13 @@
 # Fakhrul H Bhuiyan: 10.28.2020 | Fixed issues: Same thermodynamic keyword as header
 #                               | Incomplete line in the data block
 #                               | Added a new flag: 'Per MPI rank memory allocation'
+# Shihab Ahmed: 04:06:2024      | Define thermo_panda function
 
 from warnings import showwarning
 import numpy as np
 from scipy.optimize import curve_fit
 import sys
+import pandas as pd
 
 def thermo_dict(filename, serial):
     with open(filename, 'r') as f:
@@ -83,24 +85,6 @@ def thermo_dict(filename, serial):
 #   Date: 4/18/2023
 ##############
 
-def tempramp(thermo,timestep,**kwargs):
-    #getting kwargs
-    Print = kwargs.get('Print',False)
-    
-    
-    from magnolia.bondfile_parser import step2picosecond
-    def ramp_fit(x,m,c):
-        y = m*x+c
-        return y
-    
-    steps = np.array(thermo['Step'])
-    ps = np.array(step2picosecond(steps, timestep))
-    temp = np.array(thermo['Temp'])
-    p, cov = curve_fit(ramp_fit, ps, temp)
-    if Print:
-        print('Ramping Rate (m):',round(p[0],2))
-        print('Initial Temperature (c):',round(p[1],2))
-    return p
 
 
 def thermo_dict_v2(filename, serial):               
@@ -178,3 +162,64 @@ def thermo_dict_v2(filename, serial):
 
 
     return result      # Returns the whole dictionary
+
+
+def thermo_panda(logfile, serial,
+                 start_string = 'Per MPI',
+                 end_string   = 'Loop time',
+                 timestep = None):
+
+    start_lines  = []
+    end_lines    = []
+    with open(logfile, 'r') as file:
+        for i, line in enumerate(file):
+            if start_string in line:
+                start_lines.append(i)
+            if end_string in line:
+                end_lines.append(i)
+                
+    if len(start_lines)!=len(end_lines):
+        print('Warning: Log file is incomplete')
+        end_lines.append(i)
+        
+    feed = list(zip(start_lines,end_lines))
+        
+    if isinstance(serial,int):
+        if serial>len(feed):
+            raise ValueError(f'Only {len(feed)} serial exists but found {serial}')
+            
+        start, end = feed[serial-1]
+        thermo = pd.read_csv(logfile,sep=r'\s+',skiprows=start+1,
+                           nrows=end-start-2)
+        
+    elif isinstance(serial,list):
+        if all(s > len(feed) for s in serial):
+            # under construction! please do check
+            raise ValueError('Found a serial number greater than '
+                             f'the total number of serials ({len(feed)}).')
+        
+        # check what if serials are not consecutive
+        # 
+        thermo_list = []  # Create an empty list to store dataframes
+
+        for s in serial:
+            start, end = feed[s-1]
+            # Read each serial and append it to the list of thermos
+            thermo_part = pd.read_csv(logfile, sep=r'\s+', skiprows=start+1,
+                                      nrows=end-start-2)
+            thermo_list.append(thermo_part)  # Append the read data to the list
+        
+        # Combine all the individual thermos into one dataframe
+        thermo = pd.concat(thermo_list, ignore_index=True)
+            
+        print('Code is under construction..')
+    else:
+        print('Serial must be a single int or an array of int')
+    
+    # timestep keyward
+    if timestep is not None:
+        ps = thermo['Step']*timestep/1000
+        thermo['Time'] = ps
+    
+    
+    return thermo

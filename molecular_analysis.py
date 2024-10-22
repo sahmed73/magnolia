@@ -207,7 +207,8 @@ def create_mol_from_graph(graph, atypes, atomsymbols):
     return mol
 
 # Draw the molecule
-def draw_rdkit2D_from_graph(graph, atypes, atomsymbols, highlight_atoms=None, ax=None):
+def draw_rdkit2D_from_graph(graph, atypes, atomsymbols,
+                            highlight_atoms=None, ax=None):
     rdkit_mol = create_mol_from_graph(graph, atypes, atomsymbols)
 
     drawer = rdMolDraw2D.MolDraw2DCairo(300, 300)

@@ -7,7 +7,8 @@ last checked on 12/10/2023
 """
 import pandas as pd
 
-def get_species_count(speciesfile):
+def get_species_count(speciesfile, timestep=None, restart_time=False,
+                      Nfreq=1, first_timestep=False):
     with open(speciesfile,'r') as sf:
         species = {}
         for line in sf:
@@ -16,15 +17,24 @@ def get_species_count(speciesfile):
                 species_name  = headers[3:] # skip Timestep, No_moles, No_Specs
             else:
                 values        = [int(x) for x in line.strip().split()]
-                timestep      = values[0]
+                step      = values[0]
                 species_count = values[3:]
-                species[timestep]={}
+                species[step]={}
                 for key,value in zip(species_name,species_count):
                     if key in species:
-                        species[timestep][key]+=value
+                        species[step][key]+=value
                     else:
-                        species[timestep][key] = value
+                        species[step][key] = value
+                        
+                if first_timestep: break
     
-    df = pd.DataFrame(species).fillna(0)
+    df = pd.DataFrame(species).fillna(0).T
     df.index.name = 'Timestep'
-    return df
+    
+    if timestep is not None:
+        df['Time'] = df.index*timestep/1000
+    
+    if restart_time:
+        df['Time'] = df['Time'] - df['Time'].min()
+    
+    return df[::Nfreq]

@@ -10,6 +10,7 @@ This is my own LAMMPS post-processing library
 """
 
 import networkx as nx
+from networkx.algorithms import isomorphism
 from collections import Counter
 import re
 import sys
@@ -28,6 +29,7 @@ import numpy as np
 from scipy.optimize import curve_fit, newton
 from rdkit import Chem
 from sklearn.cluster import KMeans
+from collections.abc import Iterable
 
 # =============================================================================
 ## Dacorator functions:
@@ -134,7 +136,7 @@ def loadjson_or_execute(pickle_path,function, *args, **kwargs):
 
 # ---------------------List of Neighbours-----------------------------------
 @function_runtime
-def get_neighbours(bondfile,**kwargs):
+def get_neighbours(bondfile, **kwargs):
     #10 times faster than version 1
     
     #-------keyward arguments-------------
@@ -227,11 +229,11 @@ def parsebondfile(bondfilepath, cutoff=0.3,**kwargs):
     mols            = kwargs.get('mols',False) # get mtypes wise molecues
     ALL             = kwargs.get('ALL',False) # get everything
     pkl             = kwargs.get('pkl',None) # Fatser the process (directory)
-    firstStep_only = kwargs.get('firstStep_only',False) # first step only
+    firststep = kwargs.get('firststep',False) # first step only
     #-------------------------------------
-    if firstStep_only:
+    if firststep:
         pkl = None
-        print('If firstStep_only is True, pkl automatically set to None')
+        print('If firststep is True, pkl automatically set to None')
         
     if pkl is not None:
         ALL = True
@@ -250,7 +252,7 @@ def parsebondfile(bondfilepath, cutoff=0.3,**kwargs):
         if nlp or ALL: NLP = {}
         if abo or ALL: ABO = {}
         if mols or ALL: molecules = {}
-        if firstStep_only:
+        if firststep:
             fs_flag = False
         
         with open(bondfilepath) as bf:
@@ -265,7 +267,7 @@ def parsebondfile(bondfilepath, cutoff=0.3,**kwargs):
                 if line.find('Timestep')!=-1:
                     step = int(splitted[-1])
                     
-                    if firstStep_only:
+                    if firststep:
                         if fs_flag:
                             break
                         fs_flag = True
@@ -346,7 +348,7 @@ def parsebondfile(bondfilepath, cutoff=0.3,**kwargs):
             if abo or ALL: bonddata['abo'] = ABO
             if mols or ALL: bonddata['molecules'] = molecules
             
-            if firstStep_only:
+            if firststep:
                 for key, data in bonddata.items():
                     if key in ['neighbours','bondorders']:
                         for step, info in data.items():
@@ -717,7 +719,11 @@ def step2picosecond(steps,*args):
     else:
         sys.exit('Error: The length of the argument in the step2picosecond() function is not specified correctly.\n')
 
-
+def step2ps(steps,timestep):
+    # timestep in fs
+    # steps can be np array
+    ps = steps*timestep/1000
+    return ps
 #%%--sort chemical formula in this order: C,H,O---------------
 def sort_molecular_formula(molecular_formula,order=['C','H','O']):
     """
@@ -803,7 +809,7 @@ def make_molecular_formula_latex(molecular_formula,sort=False):
     if isinstance(molecular_formula, str):
         formula = [molecular_formula]
     else:
-        formula = molecular_formula.copy()
+        formula = list(molecular_formula).copy()
     
     
     
@@ -1003,7 +1009,7 @@ def plot_species_heatmap_v2(neighbours,atomtypes,atomsymbols,**kwargs):
     exclude     = kwargs.get('exclude',None)
     
     if pickle:
-        data = loadpickle_or_execute(pickle, stepwise_species_count, neighbours, atomtypes, atomsymbols,step2ps=ts)
+        data = loadpickle_or_execute(pickle, stepwise_species_count, neighbours,atomtypes, atomsymbols, step2ps=ts)
     else:
         data = stepwise_species_count(neighbours, atomtypes, atomsymbols,
                                       step2ps=ts)
@@ -1570,9 +1576,20 @@ def onset_plot(path,whole,atomsymbols,timestep,temp_ramp,initial_temp,**kwargs):
 
 #%%
 @function_runtime
-def get_species_count(bondfilepath,atomsymbols,cutoff=0.3):
-    # output a panda dataframe of specie timeseries
+def get_species_count(bondfilepath,atomsymbols, cutoff: float = 0.3,
+                      timestep = None, restart_time: bool = False,
+                      temp: tuple = None, frame: bool = False):
     
+    '''
+    input: ---, temp = (initial_temp, ramp_rate)
+    output: a panda dataframe of specie timeseries
+    '''
+    
+    # Show errors
+    if temp is not None:
+        if not isinstance(temp, Iterable) or len(temp) != 2:
+            raise ValueError("The 'temp' parameter must be an iterable with exactly two elements: (initial_temp, ramp_rate)")
+
     bonddata   = parsebondfile(bondfilepath,cutoff=cutoff)
     neighbours = bonddata['neighbours']
     atypes     = bonddata['atypes']
@@ -1588,8 +1605,25 @@ def get_species_count(bondfilepath,atomsymbols,cutoff=0.3):
             else:
                 count[step][species]=1
         
-    df = pd.DataFrame(count).fillna(0)
+    df = pd.DataFrame(count).fillna(0).T
     df.index.name = 'Timestep'
+    
+    if timestep is not None:
+        df['Time'] = df.index*timestep/1000
+    
+    if restart_time:
+        df['Time'] = df['Time'] - df['Time'].min()
+    
+    if temp is not None:
+        time = df.index*timestep/1000
+        initial_temp, ramp_rate = temp
+        df['Temperature'] = initial_temp+ramp_rate*time
+    
+    if frame:
+        df = df.reset_index(drop=True)  # Reset to default 0-based index first
+        df.index = df.index + 1         # Make it 1-based
+        df.index.name = 'Frame'
+    
     return df
 
 #%%
@@ -1674,7 +1708,9 @@ def atomConnectivity2smiles_OLD(atomConnectivity,atypes,atomic_num):
     return smiles
 
 #%%
-def moleculeGraph2smiles(moleculeGraph,atomic_num,n_clusters,plot_cluster=False,bo_analysis=True,atom_types=None):
+def moleculeGraph2smiles(moleculeGraph, atomic_num,
+                         n_clusters, plot_cluster=False,
+                         bo_analysis=True, atom_types=None):
     # moleculeGraph is a networkx Graph (to be speciec subgraph, same
     # shit though) of a single molecule having node attr as atom_type and
     # edge attr as bond_order. This converts molecule graphs to SMILES.
@@ -1730,8 +1766,8 @@ def moleculeGraph2smiles(moleculeGraph,atomic_num,n_clusters,plot_cluster=False,
                             bo_array[labels==i],s=60,edgecolor='k',
                             color=colors[i])
             plt.show()
-        ########################################################################
-        ########################################################################
+        ######################################################################
+        ######################################################################
         
         ## adding atoms
         atomid2index = {}
@@ -1855,3 +1891,70 @@ def assign_speciesID(neighbors,life=False):
         return speciesID,life_frame
     else:
         return speciesID
+#%%
+# 3/14/2024
+# Take the bondfile and return a dict: key=bond_index, value=(atom1,atom2)#bond
+# molecule_length to scan only the particular molecule
+@function_runtime
+def map_isomer_bonds(bondfilepath, ref=None, molecule_length=None):
+    # ref is the reference molecule. If None ref=first_molecule
+    bonddata = parsebondfile(bondfilepath,firststep=True) #only the first step
+    neigh    = bonddata['neighbours']
+    atypes   = bonddata['atypes']
+    molecules= get_molecules(neigh)
+    
+    # get list of molecule_graph from the first steps
+    neigh_graph = nx.Graph(neigh) 
+    mol_graphs  = []
+    for molecule in molecules:
+        if molecule_length is None or len(molecule)==molecule_length:
+            mol_graph = neigh_graph.subgraph(molecule)
+            mol_graphs.append(mol_graph)
+    # ref is a nx.Graph
+    if ref is None:
+        ref=mol_graphs[0]
+    
+    #####
+    isomer_bonds_list = []
+    # isomer_bonds_list = [e1,e2,.....,en], n=#of molecule
+    # e1 = [(e1_u1,e1_v1), (e1_u2,e1_v2), ......, #of bonds]
+    # e2 = [(e2_u1,e2_v1), (e2_u2,e2_v2), ......]
+    # where (e1_u1,e1_v1) and (e2_u1,e2_v1) are isomer bond
+    
+    ref_bonds = [(u, v) for u, v in ref.edges()]
+    for mol_graph in mol_graphs:
+        matcher = isomorphism.GraphMatcher(ref, mol_graph)
+        if matcher.is_isomorphic():
+            mapping = matcher.mapping
+            isomer_bonds = [(mapping[u], mapping[v]) for u, v in ref_bonds]
+            isomer_bonds_list.append(isomer_bonds)
+        else:
+            raise ValueError('Some molecule_graphs are not isomers')
+    
+    # returning the ref so that you can use this again to call this function    
+    return isomer_bonds_list, ref
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
