@@ -8,7 +8,7 @@
 #                               | Added a new flag: 'Per MPI rank memory allocation'
 # Shihab Ahmed: 04:06:2024      | Define thermo_panda function
 
-from warnings import showwarning
+from warnings import showwarning, warn
 import numpy as np
 from scipy.optimize import curve_fit
 import sys
@@ -167,8 +167,19 @@ def thermo_dict_v2(filename, serial):
 def thermo_panda(logfile, serial,
                  start_string = 'Per MPI',
                  end_string   = 'Loop time',
-                 timestep = None):
-
+                 zero_ref : str = None):
+    '''
+    zero_ref: str
+    Specifies which variables to apply zero-referencing to.
+    Options include:
+        - "energy": Apply zero-referencing to all energy (tot, pe, ke) columns.
+        - "time": Apply zero-referencing to time values.
+        - "energy+time" or "time+energy": Apply zero-referencing to both energy and time.
+    The values can be combined using an underscore (+) in any order.
+    '''
+    
+    timestep=None # starting None value
+    
     start_lines  = []
     end_lines    = []
     with open(logfile, 'r') as file:
@@ -177,14 +188,38 @@ def thermo_panda(logfile, serial,
                 start_lines.append(i)
             if end_string in line:
                 end_lines.append(i)
+            
+            # getting timestep
+            if line.strip().startswith('timestep'):
+                try:
+                    timestep=float(line.split('#')[0].split()[1])
+                except:
+                    pass
+                else:
+                    print(f'timestep found from the log file: {timestep}')
+    
+    if timestep is None:
+        raise ValueError("No 'timestep' value is found")
                 
     if len(start_lines)!=len(end_lines):
         print('Warning: Log file is incomplete')
         end_lines.append(i)
         
-    feed = list(zip(start_lines,end_lines))
+    feed = list(zip(start_lines,end_lines))  
+    
+    if serial=='all':
+        thermo_list = []  # Create an empty list to store dataframes
+        for f in feed:
+            start, end = f
+            # Read each serial and append it to the list of thermos
+            thermo_part = pd.read_csv(logfile, sep=r'\s+', skiprows=start+1,
+                                      nrows=end-start-2)
+            thermo_list.append(thermo_part)  # Append the read data to the list
         
-    if isinstance(serial,int):
+        # Combine all the individual thermos into one dataframe
+        thermo = pd.concat(thermo_list, ignore_index=True)
+        
+    elif isinstance(serial,int):
         if serial>len(feed):
             raise ValueError(f'Only {len(feed)} serial exists but found {serial}')
             
@@ -193,13 +228,13 @@ def thermo_panda(logfile, serial,
                            nrows=end-start-2)
         
     elif isinstance(serial,list):
-        if all(s > len(feed) for s in serial):
-            # under construction! please do check
+        if any(s > len(feed) for s in serial):
             raise ValueError('Found a serial number greater than '
                              f'the total number of serials ({len(feed)}).')
         
         # check what if serials are not consecutive
-        # 
+        # under construction
+        
         thermo_list = []  # Create an empty list to store dataframes
 
         for s in serial:
@@ -214,12 +249,31 @@ def thermo_panda(logfile, serial,
             
         print('Code is under construction..')
     else:
-        print('Serial must be a single int or an array of int')
+        raise TypeError("Serial must be a single int or an array of int or 'all'")
     
-    # timestep keyward
-    if timestep is not None:
-        ps = thermo['Step']*timestep/1000
-        thermo['Time'] = ps
-    
-    
+    # Time column
+    ps = thermo['Step']*timestep/1000
+    thermo['Time'] = ps
+        
+    if zero_ref:
+        zrefs = zero_ref.split('+')
+        for z in zrefs:
+            if z.lower()=='energy':
+                energy_columns = ['PotEng', 'TotEng', 'KinEng']
+                for col in energy_columns:
+                    if col in thermo.columns:
+                        thermo[col] = thermo[col] - thermo[col].min()
+                        
+            elif z.lower()=='time':
+                if 'Time' in thermo.columns:
+                    thermo['Time'] = thermo['Time'] - thermo['Time'].min()
+            
+            else:
+
+                warn(f"The 'zero_ref' parameter '{z}' is not recognized. "
+                    "Please use 'energy', 'time', or a combination of them.",
+                    UserWarning
+                )
+                print()
+
     return thermo

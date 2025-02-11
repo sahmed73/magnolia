@@ -16,6 +16,7 @@ import pandas as pd
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
+import os
 
 # This Function Convert .xsd file to LAMMPS Data (.data) formate.
 # The output lammps data file I used for reaxff simulation
@@ -325,3 +326,19 @@ def smiles2pdb(smiles):
     pdb_block = Chem.MolToPDBBlock(mol_with_h)
     
     return pdb_block
+
+def write_xyzfile(filename, atom_symbols, positions):
+    if os.path.exists(filename):
+        print('A xyz file with the same name already exists. Skipping!')
+        return
+    
+    lines=[f"{len(atom_symbols)}\n"]
+    positions = np.array(positions)
+    for atom, position in zip(atom_symbols, positions):
+        lines.append(f"{atom} {position[0]:.6f} {position[1]:.6f} {position[2]:.6f}")
+    
+    # Step 4: Write to a file
+    with open(filename, "w") as f:
+        f.write("\n".join(lines))
+    
+    print("XYZ file generated.")

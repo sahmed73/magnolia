@@ -1576,21 +1576,29 @@ def onset_plot(path,whole,atomsymbols,timestep,temp_ramp,initial_temp,**kwargs):
 
 #%%
 @function_runtime
-def get_species_count(bondfilepath,atomsymbols, cutoff: float = 0.3,
-                      timestep = None, restart_time: bool = False,
-                      temp: tuple = None, frame: bool = False):
-    
+def get_species_count(bondfilepath: str, atomsymbols: list, cutoff: float = 0.3,
+                      timestep: float = None, restart_time: bool = False,
+                      frame_as_index: bool = False, time_as_index: bool = False):
     '''
-    input: ---, temp = (initial_temp, ramp_rate)
-    output: a panda dataframe of specie timeseries
-    '''
-    
-    # Show errors
-    if temp is not None:
-        if not isinstance(temp, Iterable) or len(temp) != 2:
-            raise ValueError("The 'temp' parameter must be an iterable with exactly two elements: (initial_temp, ramp_rate)")
+    Input:
+        bondfilepath (str): Path to bond.out file from LAMMPS.
+        atomsymbols (list of str): List of element symbols to match atom types (e.g., ['H', 'C', 'O']).
+        cutoff (float, optional): Bond order cutoff, default is 0.3.
+        timestep (float, optional): Simulation timestep for time calculation. If it's given it will add 'Time' column.
+        restart_time (bool, optional): If True, resets time from zero. Default is False.
+        frame_as_index (bool, optional): Sets index to frame numbers (1-based). Default is False.
+        time_as_index (bool, optional): Sets index to simulation time (ps) and drops 'Time' column. Default is False.
 
-    bonddata   = parsebondfile(bondfilepath,cutoff=cutoff)
+    Output:
+        pd.DataFrame: Species time series DataFrame with optional time, frame, and temperature columns.
+    '''
+
+    # Errors    
+    if timestep is None and (time_as_index or restart_time):
+        raise ValueError("timestep is not given!")
+    ##
+
+    bonddata   = parsebondfile(bondfilepath, cutoff=cutoff)
     neighbours = bonddata['neighbours']
     atypes     = bonddata['atypes']
     
@@ -1614,15 +1622,15 @@ def get_species_count(bondfilepath,atomsymbols, cutoff: float = 0.3,
     if restart_time:
         df['Time'] = df['Time'] - df['Time'].min()
     
-    if temp is not None:
-        time = df.index*timestep/1000
-        initial_temp, ramp_rate = temp
-        df['Temperature'] = initial_temp+ramp_rate*time
-    
-    if frame:
+    if frame_as_index:
         df = df.reset_index(drop=True)  # Reset to default 0-based index first
         df.index = df.index + 1         # Make it 1-based
         df.index.name = 'Frame'
+    
+    if time_as_index:
+        time = df.Time
+        df.index=time
+        df.drop(['Time'], axis=1, inplace=True)
     
     return df
 

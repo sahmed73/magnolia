@@ -40,18 +40,16 @@ def getlab(key):
         result = 'Pressure (atm)'
     else:
         print('No Key Found')
+        result = key
     
     return result
 
-def atomids2expression(atoms): # atom ids to ovito expression selection
+def atomids2expression(atoms, key='ParticleIdentifier'): # atom ids to ovito expression selection
     
     def inner(atomss):
         expression = ''
         for atom in atomss:
-            if atomss.index(atom)==len(atomss)-1:
-                expression+='ParticleIdentifier=='+str(atom)
-            else:
-                expression+='ParticleIdentifier=='+str(atom)+'|| '
+            expression+=f'|| {key}=='+str(atom)
         
         return expression
 

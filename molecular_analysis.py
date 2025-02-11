@@ -150,12 +150,13 @@ def find_corresponding_node(graph1, graph2, node_in_graph1):
     else:
         raise ValueError("The graphs are not isomorphic.")
 
-def draw_rdkit2D_from_smiles(smiles, highlight_atoms=None, ax=None):
+def draw_rdkit2D_from_smiles(smiles, highlight_atoms=None, ax=None,
+                             canvas=1200):
     # Create RDKit mol object
     rdkit_mol = Chem.MolFromSmiles(smiles)
 
     # Set up drawing
-    drawer = rdMolDraw2D.MolDraw2DCairo(1200, 1200)
+    drawer = rdMolDraw2D.MolDraw2DCairo(canvas, canvas)
 
     # Validate highlight_atoms indices and filter out invalid indices
     valid_highlight_atoms = []
@@ -187,44 +188,103 @@ def draw_rdkit2D_from_smiles(smiles, highlight_atoms=None, ax=None):
     ax.axis('off')  # Hide the axis
 
 def create_mol_from_graph(graph, atypes, atomsymbols):
+    """
+    Converts a NetworkX graph to an RDKit molecule, preserving node-to-atom mapping.
+
+    Parameters:
+        graph: networkx.Graph
+            A molecular graph where nodes represent atoms.
+        atypes: dict
+            A dictionary mapping node IDs to atom types (integers).
+        atomsymbols: list
+            A list of atomic symbols corresponding to atom types (e.g., ['H', 'C', 'O']).
+
+    Returns:
+        mol: Chem.RWMol
+            The RDKit molecule.
+        atom_index_map: dict
+            A mapping from NetworkX node IDs to RDKit atom indices.
+    """
+    from rdkit import Chem
+
     mol = Chem.RWMol()
+    atom_index_map = {}  # Map NetworkX node ID -> RDKit atom index
 
     # Add atoms
-    atom_index_map = {}
     for node_id in graph.nodes():
-        atype = atypes.get(node_id, 1)  # Default to the first atom type if not specified
-        atom_symbol = atomsymbols[atype - 1]  # Adjust index for zero-based Python lists
+        atype = atypes.get(node_id, 1)  # Default to atom type 1 if not specified
+        atom_symbol = atomsymbols[atype - 1]  # Convert type to symbol (adjust for zero-based index)
         atom = Chem.Atom(atom_symbol)
-        atom_idx = mol.AddAtom(atom)
-        atom_index_map[node_id] = atom_idx
+        atom_idx = mol.AddAtom(atom)  # Add atom to RDKit molecule
+        atom_index_map[node_id] = atom_idx  # Map node ID to atom index
 
     # Add bonds
     for start, end in graph.edges():
         if start in atom_index_map and end in atom_index_map:
             mol.AddBond(atom_index_map[start], atom_index_map[end], Chem.rdchem.BondType.SINGLE)
 
+    # Sanitize the molecule to ensure consistency
     Chem.SanitizeMol(mol)
-    return mol
+    return mol, atom_index_map
 
-# Draw the molecule
+
 def draw_rdkit2D_from_graph(graph, atypes, atomsymbols,
-                            highlight_atoms=None, ax=None):
-    rdkit_mol = create_mol_from_graph(graph, atypes, atomsymbols)
+                            highlight_atoms=None, ax=None,
+                            atom_label=True):
+    """
+    Draws a 2D representation of the molecule from a NetworkX graph using RDKit.
 
-    drawer = rdMolDraw2D.MolDraw2DCairo(300, 300)
+    Parameters:
+        graph: networkx.Graph
+            The molecular graph.
+        atypes: dict
+            A dictionary mapping node IDs to atom types.
+        atomsymbols: list
+            A list of atomic symbols corresponding to atom types.
+        highlight_atoms: list, optional
+            A list of node IDs to highlight.
+        ax: matplotlib.Axes, optional
+            Matplotlib axis to draw the molecule on. Creates a new one if None.
+        atom_label: bool, optional
+            Whether to display atom labels (default: True).
+
+    Returns:
+        None
+    """
+    # Convert graph to RDKit molecule and get the mapping
+    rdkit_mol, atom_index_map = create_mol_from_graph(graph, atypes, atomsymbols)
+
+    # Initialize the RDKit drawer
+    drawer = rdMolDraw2D.MolDraw2DCairo(600, 600)
+    options = drawer.drawOptions()
+
+    # Disable atom labels if requested
+    if not atom_label:
+        for i in range(rdkit_mol.GetNumAtoms()):
+            options.atomLabels[i] = ""
+
+    # Highlight atoms if specified
     if highlight_atoms is not None:
-        highlight_colors = {atom: (0, 1, 0) for atom in highlight_atoms}
-        drawer.DrawMolecule(rdkit_mol, highlightAtoms=highlight_atoms, highlightAtomColors=highlight_colors)
+        # Map graph node IDs to RDKit atom indices
+        highlight_atoms_mapped = [atom_index_map[node_id] for node_id in highlight_atoms]
+        highlight_colors = {atom_index_map[node_id]: (0, 1, 0) for node_id in highlight_atoms}
+        drawer.DrawMolecule(rdkit_mol, highlightAtoms=highlight_atoms_mapped, highlightAtomColors=highlight_colors)
     else:
         drawer.DrawMolecule(rdkit_mol)
+
+    # Finalize drawing
     drawer.FinishDrawing()
 
+    # Convert RDKit's image to a PIL image
     image_data = drawer.GetDrawingText()
     image = Image.open(io.BytesIO(image_data))
+
+    # Plot the image using Matplotlib
     if ax is None:
         fig, ax = plt.subplots()
     ax.imshow(image)
     ax.axis('off')
+
 
 def draw_molecule_asGraph(G,atomsymbols,elabel=True):
     ## Input: Graph with node attr 'atom_type', edge attr 'bond_order'
