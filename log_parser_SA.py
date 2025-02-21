@@ -2,6 +2,7 @@
 
 ##### Edit history #######
 # Shihab Ahmed: 04:06:2024      | Define thermo_panda function
+# Shihab Ahmed: 02:21:2025      | Updated serial input handling to support 'start:end' notation
 
 import pandas as pd
 
@@ -10,19 +11,36 @@ def thermo_panda(logfile, serial,
                  end_string   = 'Loop time',
                  zero_ref : str = None):
     '''
-    zero_ref: str
-    Specifies which variables to apply zero-referencing to.
-    Options include:
-        - "energy": Apply zero-referencing to all energy (tot, pe, ke) columns.
-        - "time": Apply zero-referencing to time values.
-        - "energy+time" or "time+energy": Apply zero-referencing to both energy and time.
-        - "user_defined_thermo_parameter": Apply zero-referencing.
-        use '+' to use multiple options
-    The values can be combined using an underscore (+) in any order.
+    Parses LAMMPS log file to extract thermodynamic data.
+    
+    Parameters:
+    logfile : str
+        Path to the LAMMPS log file.
+    serial : int, list, or str
+        Specifies which blocks of thermo to extract (1-based):
+        - int: Extract a single serial.
+        - list: Extract multiple serials.
+        - 'start:end': Extract a range of serials.
+        - ':': Extract all serials.
+        - 'start:': Extract from start to last.
+        - ':end': Extract from first to end.
+    start_string : str, default='Per MPI'
+        String that marks the start of a thermo data block.
+    end_string : str, default='Loop time'
+        String that marks the end of a thermo data block.
+    zero_ref : str, optional
+        Specifies which variables to apply zero-referencing to.
+        Options include:
+            - "energy": Apply to all energy (TotEng, PotEng, KinEng).
+            - any thermo parameter e.g. 'Time'
+            - Use '+' to combine multiple options, e.g. 'Time+energy'.
+    
+    Returns:
+    pandas.DataFrame
+        Thermodynamic data extracted from the log file.
     '''
     
     timestep=None # starting None value
-    
     start_lines  = []
     end_lines    = []
     with open(logfile, 'r') as file:
@@ -41,6 +59,8 @@ def thermo_panda(logfile, serial,
                 else:
                     print(f'timestep found from the log file: {timestep}')
     
+    print(f'Total number of serials: {len(start_lines)}')
+    
     if timestep is None:
         timestep=1.0
         print("Warning: No 'timestep' found; set to 1.0 fs")
@@ -51,19 +71,14 @@ def thermo_panda(logfile, serial,
         
     feed = list(zip(start_lines,end_lines))  
     
-    if serial=='all':
-        thermo_list = []  # Create an empty list to store dataframes
-        for f in feed:
-            start, end = f
-            # Read each serial and append it to the list of thermos
-            thermo_part = pd.read_csv(logfile, sep=r'\s+', skiprows=start+1,
-                                      nrows=end-start-2)
-            thermo_list.append(thermo_part)  # Append the read data to the list
+    if isinstance(serial,str) and ':' in serial:
+        start, end = serial.split(':')
+        start = 1 if start == '' else int(start)
+        end = len(feed) if end == '' else int(end)
+        serial = list(range(start,end+1))
+        print(f'Serial asked for {serial}')
         
-        # Combine all the individual thermos into one dataframe
-        thermo = pd.concat(thermo_list, ignore_index=True)
-        
-    elif isinstance(serial,int):
+    if isinstance(serial,int):
         if serial>len(feed):
             raise ValueError(f'Only {len(feed)} serial exists but found {serial}')
             
@@ -76,25 +91,19 @@ def thermo_panda(logfile, serial,
             raise ValueError('Found a serial number greater than '
                              f'the total number of serials ({len(feed)}).')
         
-        # check what if serials are not consecutive
-        # under construction
-        
         thermo_list = []  # Create an empty list to store dataframes
 
         for s in serial:
             start, end = feed[s-1]
-            # Read each serial and append it to the list of thermos
             thermo_part = pd.read_csv(logfile, sep=r'\s+', skiprows=start+1,
                                       nrows=end-start-2)
-            thermo_list.append(thermo_part)  # Append the read data to the list
+            thermo_list.append(thermo_part)  
         
-        # Combine all the individual thermos into one dataframe
         thermo = pd.concat(thermo_list, ignore_index=True)
             
     else:
         raise TypeError("Serial must be a single int or an array of int or 'all'")
     
-    # Time column
     ps = thermo['Step']*timestep/1000
     thermo['Time'] = ps
         
