@@ -75,6 +75,11 @@ def thermo_panda(logfile, serial,
         start, end = serial.split(':')
         start = 1 if start == '' else int(start)
         end = len(feed) if end == '' else int(end)
+        
+        # negative indexing
+        if start<0: start = len(feed)+start+1
+        if end<0: end=len(feed)+end+1
+        
         serial = list(range(start,end+1))
         print(f'Serial asked for {serial}')
         
