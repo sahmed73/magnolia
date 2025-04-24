@@ -10,6 +10,7 @@ import matplotlib as mpl
 import random
 import numpy as np
 
+    
 def mean_range_plot(df, column=None, ax=None, alpha=0.3,
                     label=None, meanplot=True, shade=True, **kwargs):
     

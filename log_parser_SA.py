@@ -71,30 +71,41 @@ def thermo_panda(logfile, serial,
         
     feed = list(zip(start_lines,end_lines))  
     
-    if isinstance(serial,str) and ':' in serial:
-        start, end = serial.split(':')
-        start = 1 if start == '' else int(start)
-        end = len(feed) if end == '' else int(end)
-        
-        # negative indexing
-        if start<0: start = len(feed)+start+1
-        if end<0: end=len(feed)+end+1
-        
-        serial = list(range(start,end+1))
+    if isinstance(serial,str):
+        if ':' in serial:
+            start, end = serial.split(':')
+            start = 1 if start == '' else int(start)
+            end = len(feed) if end == '' else int(end)
+            
+            # negative indexing
+            if start<0: start = len(feed)+start+1
+            if end<0: end=len(feed)+end+1
+            
+            # range error
+            if start<1 or start>len(feed):
+                raise ValueError(f"Serial {serial.split(':')[0]} out of range!")
+            if end<1 or end>len(feed):
+                raise ValueError(f"Serial {serial.split(':')[1]} out of range!")
+            
+            serial = list(range(start,end+1))
+            print(f'Serial asked for {serial}')
+        else:
+            serial = int(serial)
+    
+    if isinstance(serial,int):      
+        if abs(serial)>len(feed):
+            raise ValueError(f"Serial {serial} out of range!")
+            
+        if serial<0: serial = len(feed)+serial+1
         print(f'Serial asked for {serial}')
-        
-    if isinstance(serial,int):
-        if serial>len(feed):
-            raise ValueError(f'Only {len(feed)} serial exists but found {serial}')
             
         start, end = feed[serial-1]
         thermo = pd.read_csv(logfile,sep=r'\s+',skiprows=start+1,
                            nrows=end-start-2)
         
     elif isinstance(serial,list):
-        if any(s > len(feed) for s in serial):
-            raise ValueError('Found a serial number greater than '
-                             f'the total number of serials ({len(feed)}).')
+        if any(s > len(feed) or s < 0 for s in serial):
+            raise ValueError(f"Serial {serial} out of range!")
         
         thermo_list = []  # Create an empty list to store dataframes
 
@@ -107,7 +118,7 @@ def thermo_panda(logfile, serial,
         thermo = pd.concat(thermo_list, ignore_index=True)
             
     else:
-        raise TypeError("Serial must be a single int or an array of int or 'all'")
+        raise TypeError("Serial must be an int, a list of ints, or a string in the format 'start:end'")
     
     ps = thermo['Step']*timestep/1000
     thermo['Time'] = ps

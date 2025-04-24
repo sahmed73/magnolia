@@ -150,8 +150,8 @@ def find_corresponding_node(graph1, graph2, node_in_graph1):
     else:
         raise ValueError("The graphs are not isomorphic.")
 
-def draw_rdkit2D_from_smiles(smiles, highlight_atoms=None, ax=None,
-                             canvas=1200):
+def draw_rdkit2D_from_smiles(smiles, highlight_atoms=None, highlight_color=(0, 1, 0), 
+                             ax=None, canvas=1200, warnings=True):
     # Create RDKit mol object
     rdkit_mol = Chem.MolFromSmiles(smiles)
 
@@ -166,11 +166,11 @@ def draw_rdkit2D_from_smiles(smiles, highlight_atoms=None, ax=None,
             if atom < num_atoms:
                 valid_highlight_atoms.append(atom)
             else:
-                warnings.warn(f"Atom index {atom} in highlight_atoms exceeds the number of atoms in the molecule ({num_atoms}). Skipping this atom.")
+                if warnings: print(f"Warning: Atom index {atom} in highlight_atoms exceeds the number of atoms in the molecule ({num_atoms}). Skipping this atom.")
 
     # Highlight specified atoms (only valid ones)
     if valid_highlight_atoms:
-        highlight_colors = {atom: (0, 1, 0) for atom in valid_highlight_atoms}  # RGB for green
+        highlight_colors = {atom: highlight_color for atom in valid_highlight_atoms}  # RGB for green
         drawer.DrawMolecule(rdkit_mol, highlightAtoms=valid_highlight_atoms, highlightAtomColors=highlight_colors)
     else:
         drawer.DrawMolecule(rdkit_mol)
@@ -183,7 +183,7 @@ def draw_rdkit2D_from_smiles(smiles, highlight_atoms=None, ax=None,
 
     # Display the image in the provided ax or create a new one
     if ax is None:
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(dpi=350)
     ax.imshow(image)
     ax.axis('off')  # Hide the axis
 
@@ -318,6 +318,13 @@ def draw_molecule_asGraph(G,atomsymbols,elabel=True):
         edge_labels = {(u, v): attr['bond_order'] for u, v, attr in G.edges(data=True)}
         # Draw edge labels (bond orders)
         nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
+
+def draw_molecule_asGraph_simplified(G):
+    pos = nx.spring_layout(G)
+    
+    # Draw the graph
+    nx.draw(G, pos, with_labels=True,
+            node_color='tab:blue', edgecolors='black',node_size=500)
             
 def get_moleculeGraph(molAdjList,atomtypes,bondorders):
     pass
