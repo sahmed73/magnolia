@@ -229,7 +229,7 @@ def parsebondfile(bondfilepath, cutoff=0.3,**kwargs):
     mols            = kwargs.get('mols',False) # get mtypes wise molecues
     ALL             = kwargs.get('ALL',False) # get everything
     pkl             = kwargs.get('pkl',None) # Fatser the process (directory)
-    firststep = kwargs.get('firststep',False) # first step only
+    firststep       = kwargs.get('firststep',False) # first step only
     #-------------------------------------
     if firststep:
         pkl = None

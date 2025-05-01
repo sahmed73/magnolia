@@ -120,6 +120,10 @@ def thermo_panda(logfile, serial,
     else:
         raise TypeError("Serial must be an int, a list of ints, or a string in the format 'start:end'")
     
+    # Keep only rows where all values are numeric, then drop Nan
+    thermo = thermo.apply(pd.to_numeric, errors='coerce')
+    thermo = thermo.dropna()
+    
     ps = thermo['Step']*timestep/1000
     thermo['Time'] = ps
         
