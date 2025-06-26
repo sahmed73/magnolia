@@ -9,7 +9,9 @@ import pandas as pd
 def thermo_panda(logfile, serial,
                  start_string = 'Per MPI',
                  end_string   = 'Loop time',
-                 zero_ref : str = None):
+                 zero_ref : str = None,
+                 verbose: bool = True,
+                 warn: bool = True):
     '''
     Parses LAMMPS log file to extract thermodynamic data.
     
@@ -57,16 +59,18 @@ def thermo_panda(logfile, serial,
                 except:
                     pass
                 else:
-                    print(f'timestep found from the log file: {timestep}')
+                    if verbose:
+                        print(f'timestep found from the log file: {timestep}')
     
-    print(f'Total number of serials: {len(start_lines)}')
+    if verbose:
+        print(f'Total number of serials: {len(start_lines)}')
     
     if timestep is None:
         timestep=1.0
-        print("Warning: No 'timestep' found; set to 1.0 fs")
+        if warn: print("Warning: No 'timestep' found; set to 1.0 fs")
                 
     if len(start_lines)!=len(end_lines):
-        print('Warning: Log file is incomplete')
+        if warn: print('Warning: Log file is incomplete')
         end_lines.append(i)
         
     feed = list(zip(start_lines,end_lines))  
@@ -88,7 +92,7 @@ def thermo_panda(logfile, serial,
                 raise ValueError(f"Serial {serial.split(':')[1]} out of range!")
             
             serial = list(range(start,end+1))
-            print(f'Serial asked for {serial}')
+            if verbose: print(f'Serial asked for {serial}')
         else:
             serial = int(serial)
     
@@ -97,7 +101,7 @@ def thermo_panda(logfile, serial,
             raise ValueError(f"Serial {serial} out of range!")
             
         if serial<0: serial = len(feed)+serial+1
-        print(f'Serial asked for {serial}')
+        if verbose: print(f'Serial asked for {serial}')
             
         start, end = feed[serial-1]
         thermo = pd.read_csv(logfile,sep=r'\s+',skiprows=start+1,
@@ -136,11 +140,11 @@ def thermo_panda(logfile, serial,
                     if col in thermo.columns:
                         thermo[col] = thermo[col] - thermo[col].min()
                     else:
-                        print(f"{z} in not in the thermo list")
+                        if warn: print(f"Warning: {z} in not in the thermo list")
             else:
                 if z in thermo:
                     thermo[z] = thermo[z] - thermo[z].min() 
                 else:
-                    print(f"{z} in not in the thermo list")
+                    if warn: print(f"Warning: {z} in not in the thermo list")
 
     return thermo
