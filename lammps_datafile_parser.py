@@ -9,10 +9,12 @@ import re
 import periodictable
 from pathlib import Path
 
-def read_lammps_full_datafile(filepath):
+def read_lammps_full_datafile(filepath, box_size = False):
     atom_lines = []
     bond_tuples = []
     mass_lines = []
+    
+    if box_size: box = []
     
     with open(filepath, 'r') as file:
         lines = file.readlines()
@@ -24,7 +26,21 @@ def read_lammps_full_datafile(filepath):
 
         if not line or line.startswith("#"):
             continue  # skip empty/comment lines
-
+        
+        # Box size
+        if box_size:
+            if "xlo" in line and "xhi" in line:
+                stripped = line.split()
+                box.append((float(stripped[0]), float(stripped[1])))
+            
+            if "ylo" in line and "yhi" in line:
+                stripped = line.split()
+                box.append((float(stripped[0]), float(stripped[1])))
+                
+            if "zlo" in line and "zhi" in line:
+                stripped = line.split()
+                box.append((float(stripped[0]), float(stripped[1])))
+                
         # Detect section headers
         if "Masses" in line:
             section = "masses"
@@ -89,7 +105,10 @@ def read_lammps_full_datafile(filepath):
     # Convert to DataFrames
     atom_df = pd.DataFrame(atom_lines, columns=['id', 'mol-id', 'type', 'charge', 'x', 'y', 'z'])
     mass_df = pd.DataFrame(mass_lines, columns=['type', 'mass', 'symbol', 'comment'])
-
+    
+    if box_size:
+        return box, mass_df, atom_df, bond_tuples
+    
     return mass_df, atom_df, bond_tuples
 
 
