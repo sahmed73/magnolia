@@ -466,35 +466,53 @@ def get_molecules(neigh):
     return molecules
 
 #%%-----------get chemical formula-----------------------
-def get_molecular_formula(molecule,atomtypes,atomsymbols):
+def get_molecular_formula(molecule, atomtypes, atomsymbols, merge: bool = False):
     '''
     Parameters
     ----------
-    molecule : any itterable
-        DESCRIPTION.
-    atomtypes : TYPE
-        DESCRIPTION.
-    atomsymbols : TYPE, optional
-        DESCRIPTION. The default is 'HCO'.
+    molecule : iterable
+        Atom indices/types for the molecule.
+    atomtypes : list[int]
+        Mapping from atom index → type index (1-based).
+    atomsymbols : list[str]
+        Atom symbols corresponding to type indices (e.g. ["C","C","H","O"...]).
+    merge : bool, optional
+        If True, merge all atomtypes of the same element into one count (CxHyOz).
+        Default is False.
 
     Returns
     -------
-    formula : TYPE
-        DESCRIPTION.
-
+    formula : str
+        Molecular formula string.
     '''
-    species = map(lambda x: atomtypes[x],molecule)
-    counter = [0]*len(atomsymbols)
+    # Count per atomtype index
+    species = map(lambda x: atomtypes[x], molecule)
+    counter = [0] * len(atomsymbols)
     for s in species:
-        counter[s-1]+=1
-    
-    formula = ''
-    for i in range(len(atomsymbols)):
-        if counter[i]!=0:
-            if counter[i]!=1:
-                formula += atomsymbols[i]+str(counter[i])
-            else:
-                formula += atomsymbols[i]
+        counter[s - 1] += 1
+
+    if merge:
+        # Collapse by element
+        merged_counts = {}
+        for i, sym in enumerate(atomsymbols):
+            if counter[i] != 0:
+                merged_counts[sym] = merged_counts.get(sym, 0) + counter[i]
+
+        # Hill system order: C first, H second, rest alphabetical
+        order = ["C", "H"]
+        formula = ""
+        for elem in order + sorted(set(merged_counts) - set(order)):
+            if elem in merged_counts:
+                n = merged_counts[elem]
+                formula += elem if n == 1 else f"{elem}{n}"
+    else:
+        # Keep original atomtypes separate
+        formula = ""
+        for i in range(len(atomsymbols)):
+            if counter[i] != 0:
+                n = counter[i]
+                formula += atomsymbols[i] if n == 1 else f"{atomsymbols[i]}{n}"
+
     return formula
 
 #%%---Get All Speceis Count At every Timestep--------
